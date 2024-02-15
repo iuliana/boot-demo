@@ -1,0 +1,155 @@
+= Boot-Demo
+
+Simple project for:
+
+- a simple Python web app
+- packing it in separate containers for amd64 and arm64 platforms
+- pushing these two images to an ECR repo
+- creating a multi-platform manifest for them
+- creating an oci multi-platform image
+- pushing it to an ECR Repo
+- pulling it back to test it
+- deploying this app on Kubernetes using helm
+
+TIP: I named it boot-demo, because hopefully it bootstraps my knowledge of all these things. :D
+
+== Build the Docker image
+
+In this directory run:
+
+[source, shell]
+----
+docker build -t boot-demo:1.0 .
+----
+
+The deploy the image
+
+[source, shell]
+----
+docker run -d -p 8080:8080 boot-demo:1.0
+----
+
+== Build AMD64 image
+
+[source,shell]
+----
+export DOCKER_DEFAULT_PLATFORM=linux/amd64
+docker build -t boot-demo:1.0-amd64 .
+----
+
+== Build ARM image
+
+[source,shell]
+----
+export DOCKER_DEFAULT_PLATFORM=linux/arm64
+docker build -t boot-demo:1.0-arm64 .
+----
+
+== Push Container images to ECR
+
+[source, shell]
+----
+# set up environment
+export AWS_ACCESS_KEY_ID=".."
+export AWS_SECRET_ACCESS_KEY=".."
+export AWS_SESSION_TOKEN=".."
+export REGION=eu-west-1
+export AWS_ACCOUNT=..
+export IMAGE_NAME=boot-demo
+
+echo "... login into ECR ..."
+aws ecr get-login-password --region ${REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com
+
+echo "... create ECR repository ..."
+aws ecr create-repository --repository-name ${IMAGE_NAME} --image-scanning-configuration scanOnPush=true --region ${REGION}
+
+# tag the images
+docker tag "${IMAGE_NAME}:1.0-amd64" "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0-amd64"
+docker tag "${IMAGE_NAME}:1.0-arm64" "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0-arm64"
+
+# push the images
+docker push "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0-amd64"
+docker push "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0-arm64"
+----
+
+== Creating the manifest
+
+Inspecting the manifests
+[source, shell]
+----
+docker manifest inspect "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0-amd64"
+docker manifest inspect "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0-arm64"
+----
+
+Creating the multi-platform manifest
+
+[source, shell]
+----
+export DOCKER_CLI_EXPERIMENTAL=enabled
+docker manifest create \
+    "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0" \
+    --amend  "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0-amd64" \
+    --amend "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0-arm64"
+docker manifest push "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0"
+docker manifest inspect "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0"
+----
+
+Check that it works:
+
+[source, shell]
+----
+docker pull "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0"
+docker run -d -p 8080:8080 "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0"
+----
+
+== Creating the OCI Image
+
+[source, shell]
+----
+# pre-build
+export PLATFORMS="linux/arm64,linux/amd64"
+docker buildx create --name myocibuilder --platform=${PLATFORMS} --bootstrap
+docker buildx use myocibuilder
+docker buildx inspect --bootstrap
+
+docker buildx build \
+  --platform=${PLATFORMS} \
+  --tag "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1"  --push .
+
+# inspect the manifest
+docker manifest inspect "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1"
+----
+
+Check that it works:
+
+[source, shell]
+----
+docker pull "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1"
+docker run -d -p 8080:8080 "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1"
+----
+
+== Deploy on kubernetes
+
+[source, shell]
+----
+kubectl create namespace helm-demo
+kubectl create secret docker-registry ecrcred \
+    --docker-server=${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com \
+    --docker-username=AWS \
+    --docker-password=$(aws ecr get-login-password) \
+    --namespace=helm-demo
+kubectl config set-context --current --namespace=helm-demo
+
+# package the chart
+helm package helm-demo -u
+# do a mock install
+helm install helm-demo helm-demo-0.0.1.tgz --dry-run
+# do the actuall install
+helm install helm-demo helm-demo-0.0.1.tgz --namespace=helm-demo
+
+kubectl get all,cm,secret,ing,pv,pvc
+
+# at the end - nuke everything
+helm uninstall helm-demo
+kubectl delete namespace helm-demo
+----
