@@ -113,8 +113,8 @@ docker buildx use myocibuilder
 docker buildx inspect --bootstrap
 
 docker buildx build \
-  --platform=${PLATFORMS} \
-  --tag "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1"  --push .
+    --platform=${PLATFORMS} \
+    --output "type=registry,name=${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1,oci-mediatype=true" .
 
 # inspect the manifest
 docker manifest inspect "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1"
@@ -127,6 +127,23 @@ Check that it works:
 docker pull "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1"
 docker run -d -p 8080:8080 "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1"
 ----
+
+== Push it to a New ECR Repo
+
+[source, shell]
+----
+echo "... create ECR repository ..."
+aws ecr create-repository --repository-name oci-boot --image-scanning-configuration scanOnPush=true --region ${REGION}
+
+OLD_TAG="${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1"
+NEW_TAG="${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/oci-boot:1.2"
+
+docker buildx imagetools create --tag "$NEW_TAG" "$OLD_TAG"
+
+# inspect the manifest
+docker manifest inspect "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.2"
+----
+
 
 == Deploy on kubernetes
 
@@ -153,3 +170,5 @@ kubectl get all,cm,secret,ing,pv,pvc
 helm uninstall helm-demo
 kubectl delete namespace helm-demo
 ----
+
+== Push the Helm Chart to ECR
