@@ -1,0 +1,82 @@
+= Building the Multi-Platform OCI Image
+
+CAUTION: A multi-platform builder is necessary.
+
+[source, shell]
+----
+# pre-build
+export PLATFORMS="linux/arm64,linux/amd64"
+docker buildx create --name myocibuilder --platform=${PLATFORMS} --bootstrap
+docker buildx use myocibuilder
+docker buildx inspect --bootstrap
+
+docker buildx build \
+    --platform=${PLATFORMS} \
+    --output "type=registry,name=${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1,oci-mediatype=true" .
+
+# inspect the manifest
+docker manifest inspect "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1"
+----
+
+IMPORTANT: The manifest contains `"mediaType": "application/vnd.oci.image.manifest.v1+json"` so, mucho bueno!!!
+
+Check that it works:
+
+[source, shell]
+----
+docker pull "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1"
+docker run -d -p 8080:8080 "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1"
+----
+
+== Cleanup
+
+[source, shell]
+----
+# remove the builder
+docker buildx rm myocibuilder
+----
+
+== Push It to a New ECR Repo using manifest files
+
+[source, shell]
+----
+echo "... login into source ECR ..."
+aws ecr get-login-password --region ${REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com
+
+# generate the manifest files for each platform
+docker buildx imagetools inspect --raw "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1" | jq '.manifests[] |select(.platform.architecture |contains("arm"))' > descriptor_arm.json
+docker buildx imagetools inspect --raw "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1" | jq '.manifests[] |select(.platform.architecture |contains("amd"))' > descriptor_amd.json
+----
+
+Push it to the same ECR registry:
+
+[source, shell]
+----
+docker buildx imagetools create -t "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.3" -f descriptor_amd.json -f descriptor_arm.json
+docker manifest inspect "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.3"
+----
+
+This approach works within the same ECR repository.
+
+IMPORTANT: The manifest contains `"mediaType": "application/vnd.oci.image.manifest.v1+json"` so, mucho bueno!!!
+
+Push it to another ECR registry:
+
+[source, shell]
+----
+
+REGION_OTHER=... # just change the region
+echo "... login into destination ECR - in this case we just use a different region..."
+aws ecr get-login-password --region ${REGION_OTHER} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_OTHER}.dkr.ecr.${REGION_OTHER}.amazonaws.com
+
+echo "... create ECR repository ..."
+aws ecr create-repository --repository-name oci-boot --image-scanning-configuration scanOnPush=true --region ${REGION_OTHER}
+
+# push the multi-platform image
+docker buildx imagetools create -t "${AWS_ACCOUNT}.dkr.ecr.${REGION_OTHER}.amazonaws.com/${IMAGE_NAME}:1.3" -f descriptor_amd.json -f descriptor_arm.json
+----
+
+This approach does not work when source and destination registries are different. Docker login cannot hold two sessions at once. !!!
+
+CAUTION: This is the result we get:  `ERROR: httpReadSeeker: failed open: content at https://304295633295.dkr.ecr.us-east-1.amazonaws.com/v2/boot-demo/manifests/sha256:9a0d50b75a79b8d251157287fd41ff728a9f66a3d1cdfe90eef62b832b039481 not found: not found`
+

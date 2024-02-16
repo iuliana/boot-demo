@@ -1,0 +1,63 @@
+= Building the Multi-Platform Docker Image
+
+== Build AMD64 image
+
+[source,shell]
+----
+export DOCKER_DEFAULT_PLATFORM=linux/amd64
+docker build -t boot-demo:1.0-amd64 .
+----
+
+== Build ARM image
+
+[source,shell]
+----
+export DOCKER_DEFAULT_PLATFORM=linux/arm64
+docker build -t boot-demo:1.0-arm64 .
+----
+
+== Push Container images to ECR
+
+[source, shell]
+----
+# tag the images with the platform
+docker tag "${IMAGE_NAME}:1.0-amd64" "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0-amd64"
+docker tag "${IMAGE_NAME}:1.0-arm64" "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0-arm64"
+
+# push the images
+docker push "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0-amd64"
+docker push "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0-arm64"
+----
+
+== Creating the manifest
+
+Inspecting the manifests of the images.
+
+[source, shell]
+----
+docker manifest inspect "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0-amd64"
+docker manifest inspect "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0-arm64"
+----
+
+Creating the multi-platform manifest
+
+[source, shell]
+----
+export DOCKER_CLI_EXPERIMENTAL=enabled
+docker manifest create \
+    "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0" \
+    --amend  "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0-amd64" \
+    --amend "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0-arm64"
+docker manifest push "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0"
+docker manifest inspect "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0"
+----
+
+CAUTION: Manifest contains `"application/vnd.docker.distribution.manifest.v2+json"`, no bueno!!!
+
+Check that it works:
+
+[source, shell]
+----
+docker pull "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0"
+docker run -d -p 8080:8080 "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0"
+----

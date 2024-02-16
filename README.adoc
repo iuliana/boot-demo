@@ -22,32 +22,18 @@ In this directory run:
 docker build -t boot-demo:1.0 .
 ----
 
-The deploy the image
+To deploy the image and test it:
 
 [source, shell]
 ----
 docker run -d -p 8080:8080 boot-demo:1.0
 ----
 
-== Build AMD64 image
+== Set up the Environment
+
+You will need all these env variables in your terminal,  so you can just copy-paste the commands in the docs.
 
 [source,shell]
-----
-export DOCKER_DEFAULT_PLATFORM=linux/amd64
-docker build -t boot-demo:1.0-amd64 .
-----
-
-== Build ARM image
-
-[source,shell]
-----
-export DOCKER_DEFAULT_PLATFORM=linux/arm64
-docker build -t boot-demo:1.0-arm64 .
-----
-
-== Push Container images to ECR
-
-[source, shell]
 ----
 # set up environment
 export AWS_ACCESS_KEY_ID=".."
@@ -57,93 +43,20 @@ export REGION=eu-west-1
 export AWS_ACCOUNT=..
 export IMAGE_NAME=boot-demo
 
+# set up the AWS bits
 echo "... login into ECR ..."
 aws ecr get-login-password --region ${REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com
 
 echo "... create ECR repository ..."
 aws ecr create-repository --repository-name ${IMAGE_NAME} --image-scanning-configuration scanOnPush=true --region ${REGION}
-
-# tag the images
-docker tag "${IMAGE_NAME}:1.0-amd64" "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0-amd64"
-docker tag "${IMAGE_NAME}:1.0-arm64" "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0-arm64"
-
-# push the images
-docker push "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0-amd64"
-docker push "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0-arm64"
 ----
 
-== Creating the manifest
+From here on follow whichever you are interested in:
 
-Inspecting the manifests
-[source, shell]
-----
-docker manifest inspect "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0-amd64"
-docker manifest inspect "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0-arm64"
-----
+* link:docs/docker-multi-platform.adoc[Building the Multi-Platform Docker Image]
+* link:docs/docker-multi-platform.adoc[Building the Multi-Platform Docker Image]
 
-Creating the multi-platform manifest
-
-[source, shell]
-----
-export DOCKER_CLI_EXPERIMENTAL=enabled
-docker manifest create \
-    "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0" \
-    --amend  "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0-amd64" \
-    --amend "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0-arm64"
-docker manifest push "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0"
-docker manifest inspect "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0"
-----
-
-Check that it works:
-
-[source, shell]
-----
-docker pull "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0"
-docker run -d -p 8080:8080 "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0"
-----
-
-== Creating the OCI Image
-
-[source, shell]
-----
-# pre-build
-export PLATFORMS="linux/arm64,linux/amd64"
-docker buildx create --name myocibuilder --platform=${PLATFORMS} --bootstrap
-docker buildx use myocibuilder
-docker buildx inspect --bootstrap
-
-docker buildx build \
-    --platform=${PLATFORMS} \
-    --output "type=registry,name=${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1,oci-mediatype=true" .
-
-# inspect the manifest
-docker manifest inspect "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1"
-----
-
-Check that it works:
-
-[source, shell]
-----
-docker pull "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1"
-docker run -d -p 8080:8080 "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1"
-----
-
-== Push it to a New ECR Repo
-
-[source, shell]
-----
-echo "... create ECR repository ..."
-aws ecr create-repository --repository-name oci-boot --image-scanning-configuration scanOnPush=true --region ${REGION}
-
-OLD_TAG="${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1"
-NEW_TAG="${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/oci-boot:1.2"
-
-docker buildx imagetools create --tag "$NEW_TAG" "$OLD_TAG"
-
-# inspect the manifest
-docker manifest inspect "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.2"
-----
-
+IMPORTANT: link:docs/the-problem.adoc[The problem] lists the three attempts of solving the issue of re-locating a multi-platform image while keeping it an OCI image, so an ECR registry accepts a push.
 
 == Deploy on kubernetes
 
@@ -172,3 +85,5 @@ kubectl delete namespace helm-demo
 ----
 
 == Push the Helm Chart to ECR
+
+TODO
