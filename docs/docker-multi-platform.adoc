@@ -52,7 +52,7 @@ docker manifest push "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAM
 docker manifest inspect "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0"
 ----
 
-CAUTION: Manifest contains `"application/vnd.docker.distribution.manifest.v2+json"`, no bueno!!!
+CAUTION: Manifest contains `"application/vnd.docker.distribution.manifest.v2+json"`, this is not what we want. This is a Docker manifest, not an OCI.!!!
 
 Check that it works:
 

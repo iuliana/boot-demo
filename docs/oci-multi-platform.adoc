@@ -18,7 +18,7 @@ docker buildx build \
 docker manifest inspect "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1"
 ----
 
-IMPORTANT: The manifest contains `"mediaType": "application/vnd.oci.image.manifest.v1+json"` so, mucho bueno!!!
+IMPORTANT: The manifest contains `"mediaType": "application/vnd.oci.image.manifest.v1+json"`, this is what we want an OCI specific media type.
 
 Check that it works:
 
@@ -58,7 +58,7 @@ docker manifest inspect "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_
 
 This approach works within the same ECR repository.
 
-IMPORTANT: The manifest contains `"mediaType": "application/vnd.oci.image.manifest.v1+json"` so, mucho bueno!!!
+IMPORTANT: The manifest contains `"mediaType": "application/vnd.oci.image.manifest.v1+json"`, this is what we want an OCI specific media type.
 
 Push it to another ECR registry:
 
