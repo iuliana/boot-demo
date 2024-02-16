@@ -37,15 +37,15 @@ CAUTION: If `AWS_ACCOUNT_OTHER != AWS_ACCOUNT || REGION_OTHER != REGION`, callin
 [source, shell]
 ----
 # ARM64
-PLATFORM_ONE=$(docker buildx imagetools inspect --raw "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1" | jq '.manifests[0].platform.os' | sed 's/\"//g')/$(docker buildx imagetools inspect --raw "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1" | jq '.manifests[0].platform.architecture' | sed 's/\"//g' )
 TAG_ONE=$(docker buildx imagetools inspect --raw "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1" | jq '.manifests[0].platform.architecture' | sed 's/\"//g')
+PLATFORM_ONE=$(docker buildx imagetools inspect --raw "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1" | jq '.manifests[0].platform.os' | sed 's/\"//g')/${TAG_ONE}
 docker pull --platform $PLATFORM_ONE "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1"
 docker tag "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1" "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.2-${TAG_ONE}"
 docker push "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.2-${TAG_ONE}"
 
 # AMD64
-PLATFORM_TWO=$(docker buildx imagetools inspect --raw "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1" | jq '.manifests[1].platform.os' | sed 's/\"//g')/$(docker buildx imagetools inspect --raw "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1" | jq '.manifests[1].platform.architecture' | sed 's/\"//g' )
 TAG_TWO=$(docker buildx imagetools inspect --raw "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1" | jq '.manifests[1].platform.architecture' | sed 's/\"//g')
+PLATFORM_TWO=$(docker buildx imagetools inspect --raw "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1" | jq '.manifests[1].platform.os' | sed 's/\"//g')/${TAG_TWO}
 docker pull --platform $PLATFORM_TWO "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1"
 docker tag "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1" "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.2-${TAG_TWO}"
 docker push "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.2-${TAG_TWO}"
@@ -91,12 +91,12 @@ Push it to another ECR registry:
 [source, shell]
 ----
 
-REGION_OTHER=... # just change the region
+REGION_OTHER=us-east-1 # just change the region
 echo "... login into destination ECR - in this case we just use a different region..."
 aws ecr get-login-password --region ${REGION_OTHER} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_OTHER}.dkr.ecr.${REGION_OTHER}.amazonaws.com
 
 echo "... create ECR repository ..."
-aws ecr create-repository --repository-name oci-boot --image-scanning-configuration scanOnPush=true --region ${REGION_OTHER}
+aws ecr create-repository --repository-name boot-demo --image-scanning-configuration scanOnPush=true --region ${REGION_OTHER}
 
 # push the multi-platform image
 docker buildx imagetools create -t "${AWS_ACCOUNT}.dkr.ecr.${REGION_OTHER}.amazonaws.com/${IMAGE_NAME}:1.3" -f descriptor_amd.json -f descriptor_arm.json
@@ -104,5 +104,6 @@ docker buildx imagetools create -t "${AWS_ACCOUNT}.dkr.ecr.${REGION_OTHER}.amazo
 
 IMPORTANT: This approach does not work when source and destination registries are different. Docker login cannot hold two sessions at once. !!!
 
-CAUTION: This is the result we get:  `ERROR: httpReadSeeker: failed open: content at https://304295633295.dkr.ecr.us-east-1.amazonaws.com/v2/boot-demo/manifests/sha256:9a0d50b75a79b8d251157287fd41ff728a9f66a3d1cdfe90eef62b832b039481 not found: not found`
+CAUTION: This is the result we get:  `ERROR: httpReadSeeker: failed open: content at https://304295633295.dkr.ecr.us-east-1.amazonaws.com/v2/boot-demo/manifests/sha256:ab8582a9cf7f6546a390b55fef29eba60db98d01504aca929d0c18a17d938ef4 not found: not found`
+`
 
