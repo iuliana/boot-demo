@@ -54,7 +54,7 @@ aws ecr create-repository --repository-name ${IMAGE_NAME} --image-scanning-confi
 From here on follow whichever you are interested in:
 
 * link:docs/docker-multi-platform.adoc[Building the Multi-Platform Docker Image]
-* link:docs/docker-multi-platform.adoc[Building the Multi-Platform Docker Image]
+* link:docs/docker-multi-platform.adoc[Building the Multi-Platform OCI Image]
 
 IMPORTANT: link:docs/the-problem.adoc[The problem] lists the three attempts of solving the issue of re-locating a multi-platform image while keeping it an OCI image, so an ECR registry accepts a push.
 
