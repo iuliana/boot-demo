@@ -10,7 +10,7 @@ link:https://stackoverflow.com/questions/74066597/how-to-tag-multi-architecture-
 
 [source, shell]
 ----
-AWS_ACCOUNT_OTHER=304295633295 # different than AWS_ACCOUNT
+AWS_ACCOUNT_OTHER=.. # different than AWS_ACCOUNT
 REGION_OTHER=eu-west-1 # different than REGION
 # set up the AWS bits
 echo "... login into ECR ..."
@@ -104,6 +104,81 @@ docker buildx imagetools create -t "${AWS_ACCOUNT}.dkr.ecr.${REGION_OTHER}.amazo
 
 IMPORTANT: This approach does not work when source and destination registries are different. Docker login cannot hold two sessions at once. !!!
 
-CAUTION: This is the result we get:  `ERROR: httpReadSeeker: failed open: content at https://304295633295.dkr.ecr.us-east-1.amazonaws.com/v2/boot-demo/manifests/sha256:ab8582a9cf7f6546a390b55fef29eba60db98d01504aca929d0c18a17d938ef4 not found: not found`
+CAUTION: This is the result we get:  `ERROR: httpReadSeeker: failed open: content at https://${AWS_ACCOUNT}.dkr.ecr.us-east-1.amazonaws.com/v2/boot-demo/manifests/sha256:ab8582a9cf7f6546a390b55fef29eba60db98d01504aca929d0c18a17d938ef4 not found: not found`
 `
 
+== The Solution: Using `amazon-ecr-credential-helper`
+
+Site: https://github.com/awslabs/amazon-ecr-credential-helper
+
+On macOS this gets the job done:
+
+[source, shell]
+----
+AWS_ACCOUNT=..
+REGION=eu-west-1
+REPO_SRC=${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com
+aws ecr get-login-password --region ${REGION} | docker login --username AWS --password-stdin $REPO_SRC
+TOKEN_SRC=$(aws ecr get-authorization-token --output text --query 'authorizationData[].authorizationToken')
+
+cat ~/.docker/config.json | jq  ".auths.\"$REPO_SRC\" += {"auth": \"$TOKEN_SRC\"}" > ~/.docker/config.json2
+mv -f ~/.docker/config.json{2,}
+
+AWS_ACCOUNT_OTHER=..
+REGION_OTHER=us-east-1
+REPO_DEST=${AWS_ACCOUNT_OTHER}.dkr.ecr.${REGION_OTHER}.amazonaws.com/cloudsoft-development/images
+aws ecr get-login-password --region ${REGION_OTHER} | docker login --username AWS --password-stdin $REPO_DEST
+TOKEN_DEST=$(aws ecr get-authorization-token --output text --query 'authorizationData[].authorizationToken')
+
+cat ~/.docker/config.json | jq ".auths.\"$REPO_DEST\" += {"auth": \"$TOKEN_DEST\"}" > ~/.docker/config.json2
+mv -f ~/.docker/config.json{2,}
+
+cat ~/.config.json  # should return something like
+
+{
+	"auths": {
+		"${REPO_SRC}": {
+			"auth": "${TOKEN_SRC}"
+		},
+		"REPO_DEST": {
+			"auth": "${TOKEN_DEST}"
+		}
+	},
+	"credsStore": "osxkeychain"
+}
+----
+
+With this in place running the following one after the other works!
+
+[source, shell]
+----
+aws ecr create-repository --repository-name session-test --image-scanning-configuration scanOnPush=true --region ${REGION}
+aws ecr create-repository --repository-name session-test --image-scanning-configuration scanOnPush=true --region ${REGION_OTHER}
+----
+
+This therefore works!
+
+[source, shell]
+----
+IMAGE_NAME=boot-demo
+OLD_TAG="${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1"
+NEW_TAG="${AWS_ACCOUNT_OTHER}.dkr.ecr.${REGION_OTHER}.amazonaws.com/${IMAGE_NAME}:1.1-relocated"
+
+docker buildx imagetools create --tag "$NEW_TAG" "$OLD_TAG"
+
+# inspect the manifest
+docker manifest inspect "${AWS_ACCOUNT_OTHER}.dkr.ecr.${REGION_OTHER}.amazonaws.com/${IMAGE_NAME}:1.1-relocated"
+docker manifest inspect "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.1"
+----
+
+On a Linux VM it works out of the box, just do :
+
+[source, shell]
+----
+$ sudo apt update
+$ sudo apt install amazon-ecr-credential-helper
+----
+
+And it will work as intended without too much fuss.
+
+WARNING: It seems on macOS, the `keychain` is messing up everything, and requires that silly contraption shown previously
