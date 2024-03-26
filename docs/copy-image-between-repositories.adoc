@@ -1,0 +1,92 @@
+= Copy an Image Between Registries
+
+This should not be rocket science right? Well, it is. And there are multiple ways to go about it.
+There are various tools that will copy an image between registries, including Google's link:https://github.com/google/go-containerregistry/blob/main/cmd/crane/doc/crane.md[crane], RedHat's link:https://github.com/containers/skopeo[skopeo], link:https://github.com/regclient/regclient[regclient], but also `docker buildx`.
+
+I've tried multiple approaches, as you can see from the history if this repo, but there are two that worked like a charm for me: `regclient` and `docker buildx`.
+
+We'll go the difficult path and use two secure Amazon ECR Repos. This means we need another tool to store credentials, the link:https://github.com/awslabs/amazon-ecr-credential-helper[amazon-ecr-credential-helper]
+
+== Set up
+
+IMPORTANT: on macOS the `oskeychain` gets in the middle and "steals" your Docker tokens(all in the name of security of course), so you have to put them in the `~/.docker/config.json` file yourself.
+
+[source, shell]
+----
+REGION=eu-west-1 # sample image
+REPO_SRC=${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com
+echo "... authenticate and save the token explicitly ..."
+aws ecr get-login-password --region ${REGION} | docker login --username AWS --password-stdin "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com"
+TOKEN_SRC=$(aws ecr get-authorization-token --output text --query 'authorizationData[].authorizationToken')
+cat ~/.docker/config.json | jq  ".auths.\"$REPO_SRC\" += {"auth": \"$TOKEN_SRC\"}" > ~/.docker/config.json2
+mv -f ~/.docker/config.json{2,}
+
+REGION_OTHER=us-east-1 # sample image
+REPO_DEST=${AWS_ACCOUNT}.dkr.ecr.${REGION_OTHER}.amazonaws.com
+echo "... authenticate and save the token explicitly ..."
+aws ecr get-login-password --region ${REGION_OTHER} | docker login --username AWS --password-stdin "${AWS_ACCOUNT}.dkr.ecr.${REGION_OTHER}.amazonaws.com"
+TOKEN_DEST=$(aws ecr get-authorization-token --output text --query 'authorizationData[].authorizationToken')
+cat ~/.docker/config.json | jq ".auths.\"$REPO_DEST\" += {"auth": \"$TOKEN_DEST\"}" > ~/.docker/config.json2
+mv -f ~/.docker/config.json{2,}
+
+cat ~/.config.json  # should return something like
+
+{
+	"auths": {
+		"${REPO_SRC}": {
+			"auth": "${TOKEN_SRC}"
+		},
+		"REPO_DEST": {
+			"auth": "${TOKEN_DEST}"
+		}
+	},
+	"credsStore": "osxkeychain"
+}
+----
+
+== Using `docker buildx`
+
+TIP: The `OLD_TAG` is the tag for the manifest created with Podman. `NEW_TAG` is the tag pointing at the repository where you want to copy the multi-arch image.
+
+[source, shell]
+----
+IMAGE_NAME=boot-demo
+OLD_TAG="${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0"
+NEW_TAG="${AWS_ACCOUNT_OTHER}.dkr.ecr.${REGION_OTHER}.amazonaws.com/${IMAGE_NAME}:1.0-1708080898"
+
+docker buildx imagetools create --tag "$NEW_TAG" "$OLD_TAG"
+
+# inspect the manifest
+docker manifest inspect "${AWS_ACCOUNT_OTHER}.dkr.ecr.${REGION_OTHER}.amazonaws.com/${IMAGE_NAME}:1.0-1708080898"
+docker manifest inspect "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0"
+----
+
+== Using `docker regclient`
+
+`regclient` is a set of utilitties, the one we use is `regctl`. The `regctl` utility will import credentials from the docker logins stored in `$HOME/.docker/config.json` and trust certificates loaded in `/etc/docker/certs.d/$registry/*.crt`. Thus, it will work like a charm, with the Docker setup.
+
+[source, shell]
+----
+brew install regclient # or use a way specific to your system
+
+OLD_TAG="${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0"
+NEW_TAG="${AWS_ACCOUNT}.dkr.ecr.${REGION_OTHER}.amazonaws.com/${IMAGE_NAME}:1.0-1708080898"
+
+regctl image copy "${OLD_TAG}" "${NEW_TAG}"
+# inspect the manifest
+docker manifest inspect "${AWS_ACCOUNT_OTHER}.dkr.ecr.${REGION_OTHER}.amazonaws.com/${IMAGE_NAME}:1.0-1708080898"
+docker manifest inspect "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE_NAME}:1.0"
+----
+
+== Test the image
+
+[source, shell]
+----
+echo "... test the image ..."
+podman pull "${NEW_TAG}"
+podman image inspect "${NEW_TAG}" | grep Arch
+podman run -d -p 8080:8080 "${NEW_TAG}"
+----
+
+
+

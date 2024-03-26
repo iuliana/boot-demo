@@ -11,7 +11,7 @@ Simple project for:
 - pulling it back to test it
 - deploying this app on Kubernetes using helm
 
-TIP: I named it boot-demo, because hopefully it bootstraps my knowledge of all these things. :D
+NOTE: I named it boot-demo, because hopefully it bootstraps my knowledge of all these things. :D
 
 == Build the Docker image
 
@@ -54,9 +54,12 @@ aws ecr create-repository --repository-name ${IMAGE_NAME} --image-scanning-confi
 From here on follow whichever you are interested in:
 
 * link:docs/docker-multi-platform.adoc[Building the Multi-Platform Docker Image]
-* link:docs/docker-multi-platform.adoc[Building the Multi-Platform OCI Image]
+* link:docs/docker-multi-platform.adoc[Building the Multi-Platform OCI Image using Docker Buildx]
+* link:docs/podman-multi-platform.adoc[Building the Multi-Platform OCI Image using Podman]
 
-IMPORTANT: link:docs/the-problem.adoc[The problem] lists the three attempts of solving the issue of re-locating a multi-platform image while keeping it an OCI image, so an ECR registry accepts a push.
+But eventually you will end here: link:docs/copy-image-between-repositories.adoc[copying your multi-platform image between repositories].
+
+Just in case you want to, once you have the image you can also pack it as a Helm chart and deploy it on Kubernetes or use it in a helm chart.
 
 == Deploy on kubernetes
 
@@ -86,4 +89,4 @@ kubectl delete namespace helm-demo
 
 == Push the Helm Chart to ECR
 
-TODO
+TODO (I will add this at some point)

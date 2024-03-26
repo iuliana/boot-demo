@@ -1,4 +1,4 @@
-= Building the Multi-Platform OCI Image
+= Building the Multi-Platform OCI Image using Docker Buildx
 
 CAUTION: A multi-platform builder is necessary.
 

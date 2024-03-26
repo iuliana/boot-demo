@@ -1,7 +1,7 @@
 
 replicaCount: 1
 image:
-  appContainerImage: "304295633295.dkr.ecr.eu-west-1.amazonaws.com/boot-demo:1.1"
+  appContainerImage: "${AWS_ACCOUNT}.dkr.ecr.eu-west-1.amazonaws.com/boot-demo:1.1"
   pullPolicy: IfNotPresent
 
 # kubernetes secret holding AWS login credentials
