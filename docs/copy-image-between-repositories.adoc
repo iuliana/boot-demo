@@ -13,36 +13,41 @@ IMPORTANT: on macOS the `oskeychain` gets in the middle and "steals" your Docker
 
 [source, shell]
 ----
-REGION=eu-west-1 # sample image
+rm -rf ~/.docker/config.json
+
+AWS_ACCOUNT=..
+REGION=..
 REPO_SRC=${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com
-echo "... authenticate and save the token explicitly ..."
+echo "... authenticate to source repo ..."
 aws ecr get-login-password --region ${REGION} | docker login --username AWS --password-stdin "${AWS_ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com"
-TOKEN_SRC=$(aws ecr get-authorization-token --output text --query 'authorizationData[].authorizationToken')
-cat ~/.docker/config.json | jq  ".auths.\"$REPO_SRC\" += {"auth": \"$TOKEN_SRC\"}" > ~/.docker/config.json2
-mv -f ~/.docker/config.json{2,}
 
-REGION_OTHER=us-east-1 # sample image
-REPO_DEST=${AWS_ACCOUNT}.dkr.ecr.${REGION_OTHER}.amazonaws.com
-echo "... authenticate and save the token explicitly ..."
-aws ecr get-login-password --region ${REGION_OTHER} | docker login --username AWS --password-stdin "${AWS_ACCOUNT}.dkr.ecr.${REGION_OTHER}.amazonaws.com"
-TOKEN_DEST=$(aws ecr get-authorization-token --output text --query 'authorizationData[].authorizationToken')
-cat ~/.docker/config.json | jq ".auths.\"$REPO_DEST\" += {"auth": \"$TOKEN_DEST\"}" > ~/.docker/config.json2
-mv -f ~/.docker/config.json{2,}
+# edit the ~/.docker/config.json manually and replace 'osxkeychain' with 'desktop'
 
-cat ~/.config.json  # should return something like
+AWS_ACCOUNT_OTHER=...
+REGION_OTHER=us-east-1
+REPO_DEST=${AWS_ACCOUNT_OTHER}.dkr.ecr.${REGION_OTHER}.amazonaws.com
+echo "... authenticate to destination repo ..."
+aws ecr get-login-password --region ${REGION_OTHER} | docker login --username AWS --password-stdin "${AWS_ACCOUNT_OTHER}.dkr.ecr.${REGION_OTHER}.amazonaws.com"
+
+
+cat ~/.docker/config.json  # should return something like
 
 {
-	"auths": {
-		"${REPO_SRC}": {
-			"auth": "${TOKEN_SRC}"
-		},
-		"REPO_DEST": {
-			"auth": "${TOKEN_DEST}"
-		}
-	},
-	"credsStore": "osxkeychain"
+  "auths": {
+    "{AWS_ACCOUNT}.dkr.ecr.{REGION}.amazonaws.com": {},
+    "{AWS_ACCOUNT_OTHER}.dkr.ecr.{REGION_OTHER}.amazonaws.com": {}
+  },
+  "credsStore": "desktop",
+  "currentContext": "desktop-linux",
+  "plugins": {
+    "-x-cli-hints": {
+      "enabled": "true"
+    }
+  }
 }
+
 ----
+
 
 == Using `docker buildx`
 
